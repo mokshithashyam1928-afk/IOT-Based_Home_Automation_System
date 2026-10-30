@@ -1,0 +1,141 @@
+-- ============================================================================
+-- SERN Stack IoT Home Automation System — Relational SQL Schema
+-- Compatible with SQLite & MySQL / PostgreSQL
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS users (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name VARCHAR(100) NOT NULL,
+  email VARCHAR(150) NOT NULL UNIQUE,
+  password_hash VARCHAR(255) NOT NULL,
+  role VARCHAR(20) NOT NULL DEFAULT 'USER' CHECK (role IN ('ADMIN', 'USER')),
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS rooms (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name VARCHAR(100) NOT NULL UNIQUE,
+  floor VARCHAR(50) NOT NULL DEFAULT 'Ground Floor',
+  area_sqm REAL NOT NULL DEFAULT 24.0,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS devices (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  device_uid VARCHAR(64) NOT NULL UNIQUE,
+  name VARCHAR(120) NOT NULL,
+  type VARCHAR(40) NOT NULL CHECK (type IN ('LIGHT', 'FAN', 'AC', 'THERMOSTAT', 'SMART_PLUG', 'LOCK', 'SENSOR_NODE', 'APPLIANCE')),
+  room_id INTEGER NOT NULL,
+  status VARCHAR(15) NOT NULL DEFAULT 'OFF' CHECK (status IN ('ON', 'OFF')),
+  is_online INTEGER NOT NULL DEFAULT 1,
+  power_watts REAL NOT NULL DEFAULT 15.0,
+  target_value REAL DEFAULT NULL,
+  mqtt_topic VARCHAR(180) NOT NULL,
+  firmware_version VARCHAR(32) NOT NULL DEFAULT 'v2.4.1-esp32',
+  ip_address VARCHAR(45) NOT NULL DEFAULT '192.168.1.100',
+  last_latency_ms INTEGER NOT NULL DEFAULT 12,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (room_id) REFERENCES rooms(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_devices_room ON devices(room_id);
+CREATE INDEX IF NOT EXISTS idx_devices_status ON devices(status, is_online);
+
+CREATE TABLE IF NOT EXISTS sensor_readings (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  device_id INTEGER NOT NULL,
+  room_id INTEGER NOT NULL,
+  sensor_type VARCHAR(40) NOT NULL CHECK (sensor_type IN ('TEMPERATURE', 'HUMIDITY', 'LIGHT', 'MOTION', 'ENERGY')),
+  value REAL NOT NULL,
+  unit VARCHAR(20) NOT NULL,
+  mqtt_topic VARCHAR(180) NOT NULL,
+  latency_ms INTEGER NOT NULL DEFAULT 11,
+  recorded_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (device_id) REFERENCES devices(id) ON DELETE CASCADE,
+  FOREIGN KEY (room_id) REFERENCES rooms(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_sensor_type_time ON sensor_readings(sensor_type, recorded_at DESC);
+
+CREATE TABLE IF NOT EXISTS automation_rules (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name VARCHAR(150) NOT NULL,
+  description TEXT,
+  sensor_type VARCHAR(40) NOT NULL CHECK (sensor_type IN ('TEMPERATURE', 'HUMIDITY', 'LIGHT', 'MOTION', 'ENERGY')),
+  condition_operator VARCHAR(10) NOT NULL CHECK (condition_operator IN ('>', '<', '>=', '<=', '==')),
+  threshold_value REAL NOT NULL,
+  target_device_id INTEGER NOT NULL,
+  target_action VARCHAR(15) NOT NULL CHECK (target_action IN ('ON', 'OFF')),
+  is_active INTEGER NOT NULL DEFAULT 1,
+  execution_count INTEGER NOT NULL DEFAULT 0,
+  last_triggered_at DATETIME DEFAULT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (target_device_id) REFERENCES devices(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS schedules (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name VARCHAR(150) NOT NULL,
+  device_id INTEGER NOT NULL,
+  action VARCHAR(15) NOT NULL CHECK (action IN ('ON', 'OFF')),
+  cron_time VARCHAR(20) NOT NULL,
+  days_of_week VARCHAR(60) NOT NULL DEFAULT 'Mon,Tue,Wed,Thu,Fri,Sat,Sun',
+  is_active INTEGER NOT NULL DEFAULT 1,
+  last_run_at DATETIME DEFAULT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (device_id) REFERENCES devices(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS alerts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  title VARCHAR(180) NOT NULL,
+  message TEXT NOT NULL,
+  severity VARCHAR(20) NOT NULL CHECK (severity IN ('INFO', 'WARNING', 'CRITICAL', 'SUCCESS')),
+  source VARCHAR(60) NOT NULL DEFAULT 'SYSTEM',
+  device_id INTEGER DEFAULT NULL,
+  is_resolved INTEGER NOT NULL DEFAULT 0,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (device_id) REFERENCES devices(id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS activity_logs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  actor VARCHAR(100) NOT NULL,
+  action_type VARCHAR(60) NOT NULL,
+  entity_type VARCHAR(50) NOT NULL,
+  entity_id INTEGER DEFAULT NULL,
+  details TEXT NOT NULL,
+  protocol VARCHAR(30) NOT NULL DEFAULT 'REST/HTTP',
+  latency_ms INTEGER NOT NULL DEFAULT 8,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS energy_usage (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  device_id INTEGER NOT NULL,
+  room_id INTEGER NOT NULL,
+  power_watts REAL NOT NULL,
+  energy_kwh REAL NOT NULL,
+  cost_usd REAL NOT NULL,
+  recorded_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (device_id) REFERENCES devices(id) ON DELETE CASCADE,
+  FOREIGN KEY (room_id) REFERENCES rooms(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS sqa_test_cases (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  test_code VARCHAR(30) NOT NULL UNIQUE,
+  category VARCHAR(50) NOT NULL,
+  title VARCHAR(180) NOT NULL,
+  requirement_ref VARCHAR(40) NOT NULL,
+  expected_result TEXT NOT NULL,
+  actual_result TEXT NOT NULL DEFAULT 'NOT EXECUTED',
+  status VARCHAR(30) NOT NULL DEFAULT 'NOT EXECUTED' CHECK (status IN ('NOT EXECUTED', 'PENDING', 'PASSED', 'FAILED')),
+  execution_time_ms INTEGER DEFAULT NULL,
+  executed_at DATETIME DEFAULT NULL
+);

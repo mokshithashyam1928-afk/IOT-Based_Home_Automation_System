@@ -1,0 +1,6 @@
+{
+  "name": "NexusHome — SERN IoT Automation & SQA Platform",
+  "description": "Full-stack SERN (SQL, Express, React, Node.js) IoT Home Automation System with real-time MQTT & Socket.IO telemetry, rule automation, scheduling, energy monitoring, and SQA validation suite.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
